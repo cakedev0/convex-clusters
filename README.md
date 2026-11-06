@@ -1,6 +1,6 @@
 # convex-clusters
 
-POC of outlier detection for power plant monitoring. Readings are normalized and
+POC of outlier detection for power plant monitoring. Readings are min-max scaled and
 clustered with k-means, and an alert is raised when a reading is farther than a
 threshold from the convex hull of every cluster. Hulls are sampled: each one keeps
 only the extreme points along random directions, so no facet is ever computed.
