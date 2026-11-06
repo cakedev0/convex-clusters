@@ -94,9 +94,9 @@ operation, and rare but wide regimes get many small clusters. Consequences:
 - Vertices are capped at $2m$ whatever $n_c$, so the largest clusters are described the
   most coarsely. $m$ could grow with $n_c$ at a small cost (not implemented).
 - Small clusters give small hulls: the extent of a hull grows as $\sqrt{2 \ln n_c}$, and
-  with $n_c \le d$ a hull is flat, of dimension at most $n_c - 1$. Boxes likewise get
-  zero width on some sensors, and covariances are singular, so Mahalanobis needs to
-  skip those clusters.
+  with $n_c \le d$ a hull is flat, of dimension at most $n_c - 1$. Boxes keep a non-zero
+  width unless a sensor is constant in the cluster, but they get narrow. Covariances
+  are singular, so Mahalanobis needs to skip those clusters.
 - The threshold is global, and its calibration is dominated by frequent regimes. The
   alert rate is thus controlled overall, not per regime, and can be much higher on rare
   regimes. A threshold per cluster is possible, but needs enough calibration points in
