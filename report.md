@@ -54,7 +54,7 @@ of the box, the distance is in closed form, $\lVert x - \mathrm{clip}(x, \ell, u
   values is accepted, whatever the correlations. Only the union over many clusters
   captures correlations, piecewise.
 - It is very loose in high dimension, as most of its volume lies in corners with no
-  data: the ball inscribed in a cube fills $\pi^{d/2} / (\Gamma(d/2+1)\, 2^d)$ of it,
+  data: the ball inscribed in a cube fills $\pi^{d/2} / (\Gamma(d/2+1) \cdot 2^d)$ of it,
   about $2.5 \cdot 10^{-8}$ at $d = 20$.
 - It depends on the coordinate system: rotating the sensors changes the set.
 - The untrimmed box has a breakdown point of $1/n_c$: one measurement error moves a
@@ -64,7 +64,7 @@ of the box, the distance is in closed form, $\lVert x - \mathrm{clip}(x, \ell, u
 
 ## Method 2: distance to the nearest center
 
-$A_c = \{\bar c\}$, so the normal region is a union of balls of radius $\varepsilon$.
+$A_c = \lbrace \bar c \rbrace$, so the normal region is a union of balls of radius $\varepsilon$.
 It is the baseline that uses the k-means output and nothing else.
 
 **Strengths**
@@ -145,7 +145,7 @@ $\varepsilon$ makes the problem easy.
 - *Strict membership is nearly empty in high dimension.* The hull of $n_c$ Gaussian
   points is roughly a ball of radius $\sqrt{2 \ln(n_c/d)}$, whereas a new point has a
   norm around $\sqrt{d}$. At $n_c = 1600$, $d = 20$, that's about 3.0 against 4.5, and
-  matching them takes $n_c$ of order $d\, e^{d/2}$, about $4 \cdot 10^5$ per cluster.
+  matching them takes $n_c$ of order $d \cdot e^{d/2}$, about $4 \cdot 10^5$ per cluster.
   Even if k-means cells are not Gaussian, the order of magnitude rules out relying on
   strict membership. The actual normal set is the Minkowski sum
   $\mathrm{conv}(S_c) \oplus B(\varepsilon)$, so $\varepsilon$ carries much of the
@@ -182,7 +182,7 @@ the iteration cap, which is about 1 s by estimation, never approached in practic
 
 ## Method 4: Mahalanobis distance
 
-$A_c = \{\mu_c\}$ with the distance
+$A_c = \lbrace \mu_c \rbrace$ with the distance
 $\lVert x - \mu_c \rVert_{\Sigma_c}^2 = (x - \mu_c)^\top \Sigma_c^{-1} (x - \mu_c)$, on
 trimmed clusters. The normal region is a union of ellipsoids.
 
