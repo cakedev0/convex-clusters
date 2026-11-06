@@ -1,10 +1,11 @@
 """Synthetic sensor data from a simulated power plant.
 
 Healthy readings come from a mixture of multivariate Gaussians, one per operating
-regime, with correlated sensors. Two kinds of abnormal samples can be added:
+regime (power level, plant state, outside temperature, ...), with correlated sensors
+and very unequal regime frequencies. Two kinds of abnormal samples can be added:
 
-- measurement errors: the plant is fine but a few sensors misread. They pollute
-  the training data, which is otherwise healthy.
+- measurement errors: the plant is fine but a few sensors misread. They are rare and
+  large, and pollute the training data, which is otherwise healthy.
 - faults: the plant itself left its normal operating range. They only exist at
   prediction time and are what the system should raise an alert for.
 
@@ -67,7 +68,7 @@ class Plant:
     def _to_physical(self, Z):
         return self.offset + self.scale * Z
 
-    def sample(self, n_samples, outlier_fraction=0.005, seed=0):
+    def sample(self, n_samples, outlier_fraction=1e-4, seed=0):
         """Sample readings of a healthy plant, with some measurement errors."""
         rng = np.random.default_rng(seed)
         Z, regime = self._sample_whitened(n_samples, rng)
@@ -113,17 +114,20 @@ class Plant:
             n_sensors = rng.integers(1, 4)
             sensors = rng.choice(n_features, size=n_sensors, replace=False)
             if kind[i] == SPIKE:
-                amplitude = rng.uniform(10, 40, size=n_sensors)
+                amplitude = np.exp(rng.uniform(np.log(100), np.log(3000), size=n_sensors))
                 sign = rng.choice([-1, 1], size=n_sensors)
                 X[i, sensors] += sign * amplitude * self.scale[sensors]
             elif kind[i] == DROPOUT:
                 X[i, sensors] = 0.0
             else:
-                X[i, sensors] *= rng.uniform(1.5, 3.0, size=n_sensors)
+                # Typically a unit error.
+                X[i, sensors] *= rng.uniform(10, 100, size=n_sensors)
         return kind
 
 
-def make_plant(n_features=20, n_regimes=8, n_factors=4, separation=2.0, seed=0):
+def make_plant(
+    n_features=20, n_regimes=8, n_factors=4, separation=2.0, imbalance=2.0, seed=0
+):
     """Draw the parameters of a plant.
 
     Parameters
@@ -136,17 +140,27 @@ def make_plant(n_features=20, n_regimes=8, n_factors=4, separation=2.0, seed=0):
         Rank of the part of the covariance shared between sensors.
     separation : float
         Standard deviation of the regime means, in whitened units.
+    imbalance : float
+        Regime frequencies are proportional to `rank ** -imbalance`: with the
+        defaults, from 65% for the most frequent regime to 1% for the rarest. The
+        more frequent a regime, the tighter it is, from 0.1 to 1 times the spread
+        of the rarest one: a plant sits at steady full power most of the time.
+        k-means allocates centers by inertia, so this is what makes cluster sizes
+        imbalanced, whereas unequal frequencies alone would even out.
     seed : int
         Seed of the random generator.
     """
     rng = np.random.default_rng(seed)
     # A dead sensor reads 0: the offset makes that far from its normal readings.
     scale = np.exp(rng.uniform(np.log(0.1), np.log(50.0), size=n_features))
+    weights = np.arange(1.0, n_regimes + 1) ** -imbalance
+    spread = np.geomspace(0.1, 1.0, n_regimes)
     return Plant(
-        weights=rng.dirichlet(np.full(n_regimes, 5.0)),
+        weights=weights / weights.sum(),
         means=rng.normal(scale=separation, size=(n_regimes, n_features)),
-        loadings=rng.normal(scale=0.6, size=(n_regimes, n_factors, n_features)),
-        noise_std=rng.uniform(0.3, 1.0, size=(n_regimes, n_features)),
+        loadings=spread[:, None, None]
+        * rng.normal(scale=0.6, size=(n_regimes, n_factors, n_features)),
+        noise_std=spread[:, None] * rng.uniform(0.3, 1.0, size=(n_regimes, n_features)),
         scale=scale,
         offset=scale * rng.uniform(10, 40, size=n_features),
     )

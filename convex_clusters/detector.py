@@ -16,16 +16,24 @@ class ConvexClusterDetector:
         Number of k-means clusters.
     n_directions : int
         Random directions per cluster; a hull has at most twice as many vertices.
+    scaling : {"minmax", "standard", "quantile_range"}
+        Per-sensor normalization, see `convex_clusters.clustering.SCALERS`.
     min_cluster_size : int
-        Smaller clusters get no hull: they are made of measurement errors.
+        Smaller clusters get no hull. k-means isolates large measurement errors in
+        clusters of their own, which must not count as normal states. Keep it low:
+        clusters are imbalanced, and rare regimes are genuine small clusters.
     trim_quantile : float
         Within a cluster, only this fraction of the points closest to its center
-        can be hull vertices. Extreme points are precisely where the measurement
-        errors that landed in a large cluster are, and a single one would stretch
-        the hull towards it.
+        can be hull vertices. Errors too small for k-means to isolate stay in large
+        clusters, at their extreme points, and a single one would stretch the hull
+        towards it. Clusters of fewer than `1 / (1 - trim_quantile)` points are
+        left untouched.
     target_alert_rate : float
         Fraction of the calibration data above the alert threshold. As that data
         is contaminated too, this must be above the rate of measurement errors.
+    relative_tol : float
+        Accuracy of the distances, relative to the median radius of the hulls, as
+        the normalization sets the scale of distances.
     calibration_fraction : float
         Fraction of the training data held out to set the threshold. The hulls
         can't be used on the data they are built from: these points are inside by
@@ -38,17 +46,21 @@ class ConvexClusterDetector:
         self,
         n_clusters=100,
         n_directions=100,
-        min_cluster_size=100,
-        trim_quantile=0.99,
-        target_alert_rate=0.01,
+        scaling="minmax",
+        min_cluster_size=5,
+        trim_quantile=0.999,
+        target_alert_rate=0.001,
+        relative_tol=0.01,
         calibration_fraction=0.2,
         random_state=0,
     ):
         self.n_clusters = n_clusters
         self.n_directions = n_directions
+        self.scaling = scaling
         self.min_cluster_size = min_cluster_size
         self.trim_quantile = trim_quantile
         self.target_alert_rate = target_alert_rate
+        self.relative_tol = relative_tol
         self.calibration_fraction = calibration_fraction
         self.random_state = random_state
 
@@ -57,9 +69,12 @@ class ConvexClusterDetector:
         permutation = rng.permutation(len(X))
         n_calibration = round(self.calibration_fraction * len(X))
         X_calibration = X[permutation[:n_calibration]]
-        X_train = X[permutation[n_calibration:]]
+        self.train_indices_ = permutation[n_calibration:]
+        X_train = X[self.train_indices_]
 
-        clusters = fit_clusters(X_train, self.n_clusters, seed=self.random_state)
+        clusters = fit_clusters(
+            X_train, self.n_clusters, scaling=self.scaling, seed=self.random_state
+        )
         self.clusters_ = clusters
         self.scaler_ = clusters.scaler
 
@@ -75,6 +90,7 @@ class ConvexClusterDetector:
                 for V, center in zip(self.hulls_, self.centers_)
             ]
         )
+        self.tol_ = self.relative_tol * np.median(self.radii_)
 
         distances = self.hull_distance(X_calibration)
         self.threshold_ = np.quantile(distances, 1 - self.target_alert_rate)
@@ -87,7 +103,8 @@ class ConvexClusterDetector:
             center = clusters.kmeans.cluster_centers_[c]
             points = clusters.X_scaled[clusters.labels == c]
             distances = np.linalg.norm(points - center, axis=1)
-            yield center, points[distances <= np.quantile(distances, self.trim_quantile)]
+            n_trimmed = int((1 - self.trim_quantile) * len(points))
+            yield center, points[np.argsort(distances)[: len(points) - n_trimmed]]
 
     def hull_distance(self, X):
         """Distance of each reading to the closest hull, in normalized units."""
@@ -100,7 +117,7 @@ class ConvexClusterDetector:
         for c, V in enumerate(self.hulls_):
             queries = np.flatnonzero(nearest == c)
             if queries.size:
-                distance[queries], _ = distance_to_hull(Q[queries], V)
+                distance[queries], _ = distance_to_hull(Q[queries], V, tol=self.tol_)
 
         # ... so only few other hulls can still be closer.
         for c, V in enumerate(self.hulls_):
@@ -108,7 +125,9 @@ class ConvexClusterDetector:
                 (nearest != c) & (to_center[:, c] - self.radii_[c] < distance)
             )
             if queries.size:
-                upper, _ = distance_to_hull(Q[queries], V, stop_above=distance[queries])
+                upper, _ = distance_to_hull(
+                    Q[queries], V, stop_above=distance[queries], tol=self.tol_
+                )
                 distance[queries] = np.minimum(distance[queries], upper)
         return distance
 
@@ -148,6 +167,7 @@ class ConvexClusterDetector:
                     self.hulls_[c],
                     stop_above=stop_above[queries],
                     stop_below=self.threshold_,
+                    tol=self.tol_,
                 )
                 n_solved[queries] += 1
                 alert[queries[upper <= self.threshold_]] = False

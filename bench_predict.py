@@ -86,7 +86,10 @@ def main():
 
         def all_hulls(X):
             Q = detector.scaler_.transform(X)
-            return np.min([distance_to_hull(Q, V)[0] for V in detector.hulls_], axis=0)
+            return np.min(
+                [distance_to_hull(Q, V, tol=detector.tol_)[0] for V in detector.hulls_],
+                axis=0,
+            )
 
         n = args.n_batch
         test_sets = {

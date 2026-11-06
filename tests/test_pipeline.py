@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from scipy.optimize import nnls
 
-from convex_clusters.baselines import box_scorer, raw_box_scorer
-from convex_clusters.clustering import fit_clusters
+from convex_clusters.baselines import box_scorer, mahalanobis_scorer, raw_box_scorer
+from convex_clusters.clustering import SCALERS, fit_clusters
 from convex_clusters.data import FAULT, HEALTHY, make_plant
 from convex_clusters.detector import ConvexClusterDetector
 from convex_clusters.hull import distance_to_hull, select_vertices
@@ -31,6 +31,46 @@ def test_sample_reproducible():
     assert not np.array_equal(
         make_plant(seed=1).sample(500, seed=3).X, plant.sample(500, seed=3).X
     )
+
+
+def test_plant_regimes_are_imbalanced():
+    plant = make_plant()
+    assert plant.weights.max() > 10 * plant.weights.min()
+    np.testing.assert_allclose(plant.weights.sum(), 1.0)
+
+
+@pytest.mark.parametrize("scaling", SCALERS)
+def test_fit_clusters_scaling(scaling):
+    data = make_plant(n_features=5).sample(2000)
+    result = fit_clusters(data.X, n_clusters=10, scaling=scaling)
+    assert result.sizes.sum() == 2000
+    assert result.X_scaled.std(axis=0).max() < 10 * result.X_scaled.std(axis=0).min()
+
+
+def test_minmax_is_within_unit_range_on_training_data():
+    data = make_plant(n_features=5).sample(2000)
+    result = fit_clusters(data.X, n_clusters=10)
+    assert result.X_scaled.min() >= 0.0 and result.X_scaled.max() <= 1.0 + 1e-12
+
+
+def test_trimming_leaves_small_clusters_untouched():
+    plant = make_plant(n_features=5)
+    detector = ConvexClusterDetector(
+        n_clusters=20, n_directions=10, min_cluster_size=2, trim_quantile=0.99
+    )
+    detector.fit(plant.sample(3000).X)
+    sizes = np.sort(detector.clusters_.sizes[detector.clusters_.sizes >= 2])
+    trimmed = np.sort([len(points) for _, points in detector.trimmed_clusters()])
+    np.testing.assert_array_equal(trimmed, sizes - (0.01 * sizes).astype(int))
+
+
+def test_mahalanobis_handles_constant_sensor_and_small_clusters():
+    plant = make_plant(n_features=5)
+    X = plant.sample(2000).X
+    X[:, 0] = 1.0
+    detector = ConvexClusterDetector(n_clusters=30, n_directions=10, min_cluster_size=2)
+    detector.fit(X)
+    assert np.all(np.isfinite(mahalanobis_scorer(detector)(X[:50])))
 
 
 def test_fit_clusters_sizes():
@@ -86,8 +126,10 @@ def test_hull_distance_pruning_matches_brute_force():
     detector.fit(plant.sample(5000).X)
     X = plant.sample(100, seed=1).X
     Q = detector.scaler_.transform(X)
-    brute = np.min([distance_to_hull(Q, V)[0] for V in detector.hulls_], axis=0)
-    np.testing.assert_allclose(detector.hull_distance(X), brute, atol=2e-2)
+    brute = np.min(
+        [distance_to_hull(Q, V, tol=detector.tol_)[0] for V in detector.hulls_], axis=0
+    )
+    np.testing.assert_allclose(detector.hull_distance(X), brute, atol=2 * detector.tol_)
 
 
 def test_predict_agrees_with_distance():
@@ -105,7 +147,7 @@ def test_predict_agrees_with_distance():
     distance = detector.hull_distance(X)
     # Both alert states must occur for the comparison to mean anything.
     assert 0 < alert.sum() < len(X)
-    clear_cut = np.abs(distance - detector.threshold_) > 2e-2
+    clear_cut = np.abs(distance - detector.threshold_) > 2 * detector.tol_
     np.testing.assert_array_equal(alert[clear_cut], distance[clear_cut] > detector.threshold_)
 
 

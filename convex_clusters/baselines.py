@@ -54,11 +54,21 @@ def raw_box_scorer(detector):
 
 
 def mahalanobis_scorer(detector):
-    """Mahalanobis distance to the nearest trimmed cluster."""
+    """Mahalanobis distance to the nearest trimmed cluster.
+
+    A covariance needs more points than sensors to be invertible, so clusters with
+    less than twice as many are skipped, which leaves out the smallest regimes. The
+    ridge handles sensors that are constant or redundant within a cluster.
+    """
     means, precisions = [], []
     for _, points in detector.trimmed_clusters():
+        n_points, n_features = points.shape
+        if n_points <= 2 * n_features:
+            continue
+        cov = np.cov(points.T)
+        cov += 1e-6 * np.trace(cov) / n_features * np.eye(n_features)
         means.append(points.mean(axis=0))
-        precisions.append(np.linalg.inv(np.cov(points.T)))
+        precisions.append(np.linalg.inv(cov))
 
     def score(X):
         Q = detector.scaler_.transform(X)

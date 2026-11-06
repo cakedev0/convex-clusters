@@ -27,10 +27,11 @@ def main():
     parser.add_argument("--n-features", type=int, default=20)
     parser.add_argument("--n-clusters", type=int, default=100)
     parser.add_argument("--n-directions", type=int, default=100)
-    parser.add_argument("--min-cluster-size", type=int, default=100)
-    parser.add_argument("--trim-quantile", type=float, default=0.99)
-    parser.add_argument("--target-alert-rate", type=float, default=0.01)
-    parser.add_argument("--outlier-fraction", type=float, default=0.005)
+    parser.add_argument("--scaling", default="minmax")
+    parser.add_argument("--min-cluster-size", type=int, default=5)
+    parser.add_argument("--trim-quantile", type=float, default=0.999)
+    parser.add_argument("--target-alert-rate", type=float, default=0.001)
+    parser.add_argument("--outlier-fraction", type=float, default=1e-4)
     parser.add_argument("--n-test", type=int, default=5_000)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
@@ -42,6 +43,7 @@ def main():
     detector = ConvexClusterDetector(
         n_clusters=args.n_clusters,
         n_directions=args.n_directions,
+        scaling=args.scaling,
         min_cluster_size=args.min_cluster_size,
         trim_quantile=args.trim_quantile,
         target_alert_rate=args.target_alert_rate,
@@ -59,6 +61,15 @@ def main():
         f" {(sizes < args.min_cluster_size).sum()} without hull,"
         f" median size {np.median(sizes):.0f}"
     )
+    labels = detector.clusters_.labels
+    errors_in_train = train.is_measurement_error[detector.train_indices_]
+    print(
+        f"measurement errors in the training split: {errors_in_train.sum()},"
+        f" {(sizes[labels[errors_in_train]] == 1).sum()} alone in their cluster,"
+        f" {(sizes[labels[errors_in_train]] >= args.min_cluster_size).sum()}"
+        " in a cluster with a hull"
+    )
+    print(f"cluster sizes, deciles: {np.quantile(sizes, np.linspace(0, 1, 11)).astype(int)}")
     print(f"hulls: {len(detector.hulls_)}, median vertices {np.median(n_vertices):.0f}")
     print(f"threshold: {detector.threshold_:.3f} (normalized units)")
     print(f"fit time: {fit_time:.1f}s")
