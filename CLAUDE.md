@@ -37,6 +37,10 @@ The last two are CPU-heavy: run them under `benchlock`.
 
 ## Design notes
 
+`report.md` covers the mathematical properties and costs of each method. It leaves
+out detection performance on purpose: synthetic data says little about a real plant.
+Keep it that way.
+
 - Hulls are implicit, only a set of vertices: facets are out of reach at d=20.
 - New healthy readings are almost never strictly inside a hull at d=20, even a hull
   of all the points of a cluster. Decisions rely on the threshold on the distance,
