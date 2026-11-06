@@ -16,13 +16,13 @@ each cluster. A reading $x$ is normal if it is in the union of the $A_c$, or wit
 distance $\varepsilon$ of it:
 
 $$
-\text{alert}(x) \iff \min_c \operatorname{dist}(x, A_c) > \varepsilon
+\text{alert}(x) \iff \min_c \mathrm{dist}(x, A_c) > \varepsilon
 $$
 
 Three properties matter throughout:
 
 - **Nesting.** With $S \subset C_c$, we have
-  $\operatorname{conv}(S) \subset \operatorname{conv}(C_c) \subset \operatorname{box}(C_c)$.
+  $\mathrm{conv}(S) \subset \mathrm{conv}(C_c) \subset \mathrm{box}(C_c)$.
   The hull is the smallest convex set containing the cluster, the box the smallest
   axis-aligned one.
 - **Extreme points versus moments.** Boxes and hulls are built from extreme values,
@@ -39,7 +39,7 @@ Three properties matter throughout:
 $A_c = \prod_j [\min_{C_c} x_j, \max_{C_c} x_j]$, the per-sensor min/max of each
 cluster. Used with $\varepsilon = 0$, this is `box raw` in the code. The `box` variant
 uses the trimming and the threshold of the hull method; with $\ell$ and $u$ the bounds
-of the box, the distance is in closed form, $\lVert x - \operatorname{clip}(x, \ell, u) \rVert$.
+of the box, the distance is in closed form, $\lVert x - \mathrm{clip}(x, \ell, u) \rVert$.
 
 **Strengths**
 
@@ -84,11 +84,11 @@ It is the baseline that uses the k-means output and nothing else.
 
 ## Method 3: sampled convex hull
 
-$A_c = \operatorname{conv}(S_c)$, where $S_c$ holds the min and max of $C_c$ (after
+$A_c = \mathrm{conv}(S_c)$, where $S_c$ holds the min and max of $C_c$ (after
 trimming) along $m$ random unit directions, so it has $v \le 2m$ vertices.
 
 **Why this is the set of interest.** If the physics says that any convex combination
-of healthy states is healthy, then $\operatorname{conv}(C_c)$ is exactly what the data
+of healthy states is healthy, then $\mathrm{conv}(C_c)$ is exactly what the data
 certifies as healthy, with no distributional assumption. The box adds states that
 nothing certifies, and an ellipsoid both adds and removes some.
 
@@ -98,7 +98,7 @@ distance are convex programs over the weights of the vertices, whose size doesn'
 involve facets. With $V$ the matrix of the vertices:
 
 $$
-\operatorname{dist}(x, \operatorname{conv}(S))^2 = \min_{w} \lVert V^\top w - x \rVert^2
+\mathrm{dist}(x, \mathrm{conv}(S))^2 = \min_{w} \lVert V^\top w - x \rVert^2
 \quad \text{s.t.} \quad w \ge 0, \quad \sum_i w_i = 1
 $$
 
@@ -108,7 +108,7 @@ $s \cdot r$. With gap $g = \max_{s \in S} (s - y) \cdot r$, any point $z$ of the
 satisfies $r \cdot z \le r \cdot y + g$, so:
 
 $$
-\lVert r \rVert - \frac{g}{\lVert r \rVert} \le \operatorname{dist}(x, \operatorname{conv}(S)) \le \lVert r \rVert
+\lVert r \rVert - \frac{g}{\lVert r \rVert} \le \mathrm{dist}(x, \mathrm{conv}(S)) \le \lVert r \rVert
 $$
 
 Both bounds are valid at every iteration, the lower one being a separating hyperplane.
@@ -120,14 +120,14 @@ $\varepsilon$ makes the problem easy.
 
 **Avoiding most hulls.** Two facts cut the number of hulls to solve:
 
-- Each $\operatorname{conv}(S_c)$ lies in the Voronoi cell of $\bar c$, since the cell
+- Each $\mathrm{conv}(S_c)$ lies in the Voronoi cell of $\bar c$, since the cell
   is convex and contains $C_c$. Hence hulls are disjoint, and a point strictly inside a
   hull has that cluster as its nearest center: at $\varepsilon = 0$, only the nearest
   hull has to be solved. With $\varepsilon > 0$ this is no longer strict, but it
   justifies visiting hulls by increasing distance to their center, and stopping at the
   first one within $\varepsilon$.
 - With $R_c = \max_{s \in S_c} \lVert s - \bar c \rVert$, we have
-  $\operatorname{dist}(x, \operatorname{conv}(S_c)) \ge \lVert x - \bar c \rVert - R_c$,
+  $\mathrm{dist}(x, \mathrm{conv}(S_c)) \ge \lVert x - \bar c \rVert - R_c$,
   so a hull is skipped without any solving when this exceeds $\varepsilon$. This is what
   makes readings far from everything cheap.
 
@@ -148,7 +148,7 @@ $\varepsilon$ makes the problem easy.
   matching them takes $n_c$ of order $d\, e^{d/2}$, about $4 \cdot 10^5$ per cluster.
   Even if k-means cells are not Gaussian, the order of magnitude rules out relying on
   strict membership. The actual normal set is the Minkowski sum
-  $\operatorname{conv}(S_c) \oplus B(\varepsilon)$, so $\varepsilon$ carries much of the
+  $\mathrm{conv}(S_c) \oplus B(\varepsilon)$, so $\varepsilon$ carries much of the
   decision, and the elegant "in the hull means fine" reading does not hold as is.
 - *The threshold is isotropic and global.* It is one Euclidean radius, in normalized
   units, for all clusters and directions. This partly undoes the shape-awareness of the
