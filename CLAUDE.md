@@ -3,7 +3,9 @@
 POC of outlier detection for power plant monitoring. Readings are normalized and
 clustered with k-means, then an alert is raised when a reading is too far from the
 convex hull of every cluster. The current system of the person monitoring the plant
-uses boxes instead of hulls: `box` and `box raw` are the baselines to beat.
+uses boxes instead of hulls, the axis-aligned min/max of each cluster: `box raw` in
+`run_poc.py` is that system, and the baseline to beat. `box` is the same with this
+POC's trimming and threshold.
 
 ## Context
 
@@ -44,5 +46,5 @@ The last two are CPU-heavy: run them under `benchlock`.
 - The threshold is calibrated on held-out data, as training points are in the hulls
   by construction. That data is contaminated, so `target_alert_rate` has to be above
   the rate of measurement errors.
-- Assumptions to check on real data: renormalization is `StandardScaler`, boxes are
-  axis-aligned, and the synthetic fault models are placeholders for real faults.
+- Assumptions to check on real data: renormalization is `StandardScaler`, and the
+  synthetic fault models are placeholders for real faults.
