@@ -42,8 +42,9 @@ The clusters have two jobs at once, which interact.
 of the plant, the outside temperature and so on, so healthy readings do not form one
 blob. Clusters cut them into pieces. As most of these conditions are continuous, a
 regime is not necessarily one cluster: a union of convex pieces can approximate a
-normal set which is not convex. So the convexity assumption only has to hold locally,
-within a cluster, not for the plant as a whole.
+normal set which is not convex. Per-cluster hulls thus only assume convexity within
+each cluster, the weakest of the hypotheses in
+[Where convexity holds](#where-convexity-holds).
 
 **Isolating measurement errors.** k-means gives a far point its own center when this
 saves more inertia than the best other use of that center. Giving a center to an error
@@ -101,6 +102,51 @@ operation, and rare but wide regimes get many small clusters. Consequences:
   alert rate is thus controlled overall, not per regime, and can be much higher on rare
   regimes. A threshold per cluster is possible, but needs enough calibration points in
   each cluster, precisely what rare regimes lack.
+
+## Where convexity holds
+
+Hulls rely on convex combinations of healthy readings being healthy. Where this holds
+is not known, and it can be framed as a question of scale. Take a sensor that responds
+smoothly to an operating variable $p$, such as power: $y = f(p)$. The midpoint of two
+healthy readings at $p_1$ and $p_2$ misses the healthy curve by about:
+
+$$
+\frac{|f''| (p_1 - p_2)^2}{8}
+$$
+
+Convexity is a good approximation as long as this gap stays below the noise: between
+nearby regimes, or over any range where the response is close to linear. It fails
+between distant regimes on a curved response. Categorical plant states are a different
+case: halfway between "shutdown" and "full power" may not be healthy, even if every
+sensor responds linearly.
+
+This gives three hypotheses, from weakest to strongest:
+
+| Hypothesis | Hull | New regimes accepted |
+|---|---|---|
+| Within a cluster | one per cluster, as in this POC | only near known ones |
+| Within a plant state | one per state | mixes of regimes of the same state |
+| Global | one for all healthy data | any mix of known regimes |
+
+The weakest is almost free, since a union of small convex pieces fits any shape. For
+the same reason, it cannot accept a new regime between two clusters: each hull lies in
+the Voronoi cell of its cluster (see Method 3), so the union of the hulls is much
+smaller than the hull of their union. Everything in this report implements the first
+hypothesis. [probabilistic_take.md](probabilistic_take.md) sketches a model for the
+third.
+
+A family in between (not implemented): score each reading against the hull of its $m$
+nearest clusters. $m = 1$ is the first hypothesis and $m = k$ the third, so $m$ could be
+chosen from data rather than decided upfront.
+
+Data can show where convexity fails, but cannot prove that an unseen mix is healthy:
+
+- Within each plant state, regressing each sensor on the operating variables (power,
+  outside temperature), linear against quadratic, estimates $f''$, hence the scale above.
+- Holding out a cluster whose center is inside the hull of the others, and finding the
+  smallest $m$ that accepts its readings, measures it directly.
+- Training on the first months and scoring the later ones tests what new regimes look
+  like in practice, which is the claim itself.
 
 ## Preprocessing
 
@@ -242,8 +288,8 @@ It is the baseline that uses the k-means output and nothing else.
 $A_c = \mathrm{conv}(S_c)$, where $S_c$ holds the min and max of $C_c$ (after
 trimming) along $m$ random unit directions, so it has $v \le 2m$ vertices.
 
-**Why this is the set of interest.** If the physics says that any convex combination
-of healthy states is healthy, then $\mathrm{conv}(C_c)$ is exactly what the data
+**Why this is the set of interest.** If convex combinations of healthy states within a
+cluster are healthy, then $\mathrm{conv}(C_c)$ is exactly what the data
 certifies as healthy, with no distributional assumption. The box adds states that
 nothing certifies, and an ellipsoid both adds and removes some.
 
